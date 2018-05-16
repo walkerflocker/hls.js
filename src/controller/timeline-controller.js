@@ -212,6 +212,18 @@ class TimelineController extends EventHandler {
         this.textTracks.push(textTrack);
       });
     }
+
+    if (data.captions) {
+      this.captionsProperties = {};
+      data.captions.forEach((captionAttributes, i) => {
+        const property = 'textTrack' + (i + 1);
+        this.captionsProperties[property] = {
+          label: captionAttributes.name,
+          languageCode: captionAttributes.lang
+        };
+        this.createCaptionsTrack(property);
+      });
+    }
   }
 
   onLevelSwitching() {
