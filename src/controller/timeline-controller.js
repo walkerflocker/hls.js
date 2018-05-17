@@ -128,7 +128,7 @@ class TimelineController extends EventHandler {
       //Enable reuse of existing text track.
       let existingTrack = this.getExistingTrack(track);
       if (!existingTrack) {
-        const textTrack = this.createTextTrack('captions', this.config['captionsTextTrack' + track + 'Label'], this.config.captionsTextTrack1LanguageCode);
+        const textTrack = this.createTextTrack('captions', this.config['captionsTextTrack' + track + 'Label'], this.config['captionsTextTrack' + track + 'languageCode']);
         if (textTrack) {
           textTrack[trackVar] = true;
           this[trackVar] = textTrack;
@@ -214,14 +214,12 @@ class TimelineController extends EventHandler {
     }
 
     if (data.captions) {
-      this.captionsProperties = {};
       data.captions.forEach((captionAttributes, i) => {
-        const property = 'textTrack' + (i + 1);
-        this.captionsProperties[property] = {
-          label: captionAttributes.name,
-          languageCode: captionAttributes.lang
-        };
-        this.createCaptionsTrack(property);
+        if (!this.config['captionsTextTrack' + (i + 1) + 'Label']) {
+          this.config['captionsTextTrack' + (i + 1) + 'Label'] = captionAttributes.name;
+          this.config['captionsTextTrack' + (i + 1) + 'LanguageCode'] = captionAttributes.lang;
+        }
+        this.createCaptionsTrack(i + 1);
       });
     }
   }

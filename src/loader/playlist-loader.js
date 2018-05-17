@@ -538,7 +538,7 @@ class PlaylistLoader extends EventHandler {
           const audioGroups = levels.map(l => ({ id: l.attrs.AUDIO, codec: l.audioCodec}));
           let audioTracks = this.parseMasterPlaylistMedia(string, url, 'AUDIO', audioGroups);
           let subtitles = this.parseMasterPlaylistMedia(string, url, 'SUBTITLES');
-          let captions = M3U8Parser.parseMasterPlaylistMedia(string, url, 'CLOSED-CAPTIONS');
+          let captions = this.parseMasterPlaylistMedia(string, url, 'CLOSED-CAPTIONS');
           if (audioTracks.length) {
             // check if we have found an audio track embedded in main playlist (audio track without URI attribute)
             let embeddedAudioFound = false;
