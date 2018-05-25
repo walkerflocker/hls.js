@@ -153,8 +153,12 @@ class TimelineController extends EventHandler {
   }
 
   onMediaDetaching() {
-    clearCurrentCues(this.textTrack1);
-    clearCurrentCues(this.textTrack2);
+    let i = 0;
+    while(this.hasOwnProperty('textTrack' + ++i)) {
+      clearCurrentCues(this['textTrack' + i]);
+    }
+    this.embeddedCea608FieldParsers = [];
+    this.textTracks = {};
   }
 
   onManifestLoading()
