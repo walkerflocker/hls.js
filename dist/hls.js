@@ -7,7 +7,7 @@
 		exports["Hls"] = factory();
 	else
 		root["Hls"] = factory();
-})(this, function() {
+})(typeof self !== 'undefined' ? self : this, function() {
 return /******/ (function(modules) { // webpackBootstrap
 /******/ 	// The module cache
 /******/ 	var installedModules = {};
@@ -1460,7 +1460,7 @@ function isUndefined(arg) {
 (function(root) { 
 /* jshint ignore:end */
 
-  var URL_REGEX = /^((?:[^\/;?#]+:)?)(\/\/[^\/\;?#]*)?(.*?)??(;.*?)?(\?.*?)?(#.*?)?$/;
+  var URL_REGEX = /^((?:[a-zA-Z0-9+\-.]+:)?)(\/\/[^\/\;?#]*)?(.*?)??(;.*?)?(\?.*?)?(#.*?)?$/;
   var FIRST_SEGMENT_REGEX = /^([^\/;?#]*)(.*)$/;
   var SLASH_DOT_REGEX = /(?:\/|^)\.(?=\/)/g;
   var SLASH_DOT_DOT_REGEX = /(?:\/|^)\.\.\/(?!\.\.\/).*?(?=\/)/g;
@@ -1470,7 +1470,7 @@ function isUndefined(arg) {
     // E.g
     // With opts.alwaysNormalize = false (default, spec compliant)
     // http://a.com/b/cd + /e/f/../g => http://a.com/e/f/../g
-    // With opts.alwaysNormalize = true (default, not spec compliant)
+    // With opts.alwaysNormalize = true (not spec compliant)
     // http://a.com/b/cd + /e/f/../g => http://a.com/e/g
     buildAbsoluteURL: function(baseURL, relativeURL, opts) {
       opts = opts || {};
@@ -1484,14 +1484,14 @@ function isUndefined(arg) {
         if (!opts.alwaysNormalize) {
           return baseURL;
         }
-        var basePartsForNormalise = this.parseURL(baseURL);
-        if (!baseParts) {
+        var basePartsForNormalise = URLToolkit.parseURL(baseURL);
+        if (!basePartsForNormalise) {
           throw new Error('Error trying to parse base URL.');
         }
         basePartsForNormalise.path = URLToolkit.normalizePath(basePartsForNormalise.path);
         return URLToolkit.buildURLFromParts(basePartsForNormalise);
       }
-      var relativeParts = this.parseURL(relativeURL);
+      var relativeParts = URLToolkit.parseURL(relativeURL);
       if (!relativeParts) {
         throw new Error('Error trying to parse relative URL.');
       }
@@ -1504,7 +1504,7 @@ function isUndefined(arg) {
         relativeParts.path = URLToolkit.normalizePath(relativeParts.path);
         return URLToolkit.buildURLFromParts(relativeParts);
       }
-      var baseParts = this.parseURL(baseURL);
+      var baseParts = URLToolkit.parseURL(baseURL);
       if (!baseParts) {
         throw new Error('Error trying to parse base URL.');
       }
@@ -6428,6 +6428,7 @@ var playlist_loader_PlaylistLoader = function (_EventHandler) {
           });
           var audioTracks = this.parseMasterPlaylistMedia(string, url, 'AUDIO', audioGroups);
           var subtitles = this.parseMasterPlaylistMedia(string, url, 'SUBTITLES');
+          var captions = this.parseMasterPlaylistMedia(string, url, 'CLOSED-CAPTIONS');
           if (audioTracks.length) {
             // check if we have found an audio track embedded in main playlist (audio track without URI attribute)
             var embeddedAudioFound = false;
@@ -6443,7 +6444,7 @@ var playlist_loader_PlaylistLoader = function (_EventHandler) {
               audioTracks.unshift({ type: 'main', name: 'main' });
             }
           }
-          hls.trigger(events["a" /* default */].MANIFEST_LOADED, { levels: levels, audioTracks: audioTracks, subtitles: subtitles, url: url, stats: stats, networkDetails: networkDetails });
+          hls.trigger(events["a" /* default */].MANIFEST_LOADED, { levels: levels, audioTracks: audioTracks, subtitles: subtitles, captions: captions, url: url, stats: stats, networkDetails: networkDetails });
         } else {
           hls.trigger(events["a" /* default */].ERROR, { type: errors["b" /* ErrorTypes */].NETWORK_ERROR, details: errors["a" /* ErrorDetails */].MANIFEST_PARSING_ERROR, fatal: true, url: url, reason: 'no level found in manifest', networkDetails: networkDetails });
         }
@@ -13776,6 +13777,12 @@ var Cea608Parser = function () {
         for (var i = 0; i < byteList.length; i += 2) {
             a = byteList[i] & 0x7f;
             b = byteList[i + 1] & 0x7f;
+            if (a >= 0x10 && a <= 0x1f && a === this.lastCmdA && b === this.lastCmdB) {
+                this.lastCmdA = null;
+                this.lastCmdB = null;
+                cea_608_parser_logger.log('DEBUG', 'Repeated command (' + numArrayToHexArray([a, b]) + ') is dropped');
+                continue; // Repeated commands are dropped (once)
+            }
             if (a === 0 && b === 0) {
                 this.dataCounters.padding += 2;
                 continue;
@@ -13823,28 +13830,21 @@ var Cea608Parser = function () {
     Cea608Parser.prototype.parseCmd = function parseCmd(a, b) {
         var chNr = null;
 
-        var cond1 = (a === 0x14 || a === 0x1C) && 0x20 <= b && b <= 0x2F;
+        var cond1 = (a === 0x14 || a === 0x15 || a === 0x1C || a === 0x1D) && b >= 0x20 && b <= 0x2F;
         var cond2 = (a === 0x17 || a === 0x1F) && 0x21 <= b && b <= 0x23;
         if (!(cond1 || cond2)) {
             return false;
         }
 
-        if (a === this.lastCmdA && b === this.lastCmdB) {
-            this.lastCmdA = null;
-            this.lastCmdB = null; // Repeated commands are dropped (once)
-            cea_608_parser_logger.log('DEBUG', 'Repeated command (' + numArrayToHexArray([a, b]) + ') is dropped');
-            return true;
-        }
-
-        if (a === 0x14 || a === 0x17) {
+        if (a === 0x14 || a === 0x15 || a === 0x17) {
             chNr = 1;
         } else {
-            chNr = 2; // (a === 0x1C || a=== 0x1f)
+            chNr = 2; // (a === 0x1C || a === 0x1D || a=== 0x1f)
         }
 
         var channel = this.channels[chNr - 1];
 
-        if (a === 0x14 || a === 0x1C) {
+        if (a === 0x14 || a === 0x15 || a === 0x1C || a === 0x1D) {
             if (b === 0x20) {
                 channel.ccRCL();
             } else if (b === 0x21) {
@@ -13908,8 +13908,12 @@ var Cea608Parser = function () {
                 return false;
             }
             var channel = this.channels[chNr - 1];
+            // cea608 spec says midrow codes should inject a space
+            channel.insertChars([0x20]);
             channel.ccMIDROW(b);
             cea_608_parser_logger.log('DEBUG', 'MIDROW (' + numArrayToHexArray([a, b]) + ')');
+            this.lastCmdA = a;
+            this.lastCmdB = b;
             return true;
         }
         return false;
@@ -13929,12 +13933,6 @@ var Cea608Parser = function () {
         var case2 = (a === 0x10 || a === 0x18) && 0x40 <= b && b <= 0x5F;
         if (!(case1 || case2)) {
             return false;
-        }
-
-        if (a === this.lastCmdA && b === this.lastCmdB) {
-            this.lastCmdA = null;
-            this.lastCmdB = null;
-            return true; // Repeated commands are dropped (once)
         }
 
         chNr = a <= 0x17 ? 1 : 2;
@@ -14012,14 +14010,16 @@ var Cea608Parser = function () {
             }
             cea_608_parser_logger.log('INFO', 'Special char \'' + getCharForByte(oneCode) + '\' in channel ' + channelNr);
             charCodes = [oneCode];
+            this.lastCmdA = a;
+            this.lastCmdB = b;
         } else if (0x20 <= a && a <= 0x7f) {
             charCodes = b === 0 ? [a] : [a, b];
+            this.lastCmdA = a;
+            this.lastCmdB = b;
         }
         if (charCodes) {
             var hexCodes = numArrayToHexArray(charCodes);
             cea_608_parser_logger.log('DEBUG', 'Char codes =  ' + hexCodes.join(','));
-            this.lastCmdA = null;
-            this.lastCmdB = null;
         }
         return charCodes;
     };
@@ -14056,8 +14056,8 @@ var Cea608Parser = function () {
         chNr = a < 0x18 ? 1 : 2;
         channel = this.channels[chNr - 1];
         channel.setBkgData(bkgData);
-        this.lastCmdA = null;
-        this.lastCmdB = null;
+        this.lastCmdA = a;
+        this.lastCmdB = b;
         return true;
     };
 
@@ -14351,18 +14351,12 @@ var timeline_controller_TimelineController = function (_EventHandler) {
     _this.unparsedVttFrags = [];
     _this.initPTS = undefined;
     _this.cueRanges = [];
-
-    if (_this.config.enableCEA708Captions) {
-      var channel1 = new output_filter(_this, 1);
-      var channel2 = new output_filter(_this, 2);
-
-      _this.cea608Parser = new cea_608_parser(0, channel1, channel2);
-    }
+    _this.embeddedCea608FieldParsers = [];
     return _this;
   }
 
   TimelineController.prototype.addCues = function addCues(channel, startTime, endTime, screen) {
-    // skip cues which overlap more than 50% with previously parsed time ranges
+    // skip cues which overlap more than 80% with previously parsed time ranges
     var ranges = this.cueRanges;
     var merged = false;
     for (var i = ranges.length; i--;) {
@@ -14372,7 +14366,7 @@ var timeline_controller_TimelineController = function (_EventHandler) {
         cueRange[0] = Math.min(cueRange[0], startTime);
         cueRange[1] = Math.max(cueRange[1], endTime);
         merged = true;
-        if (overlap / (endTime - startTime) > 0.5) {
+        if (overlap / (endTime - startTime) > 1) {
           return;
         }
       }
@@ -14436,7 +14430,7 @@ var timeline_controller_TimelineController = function (_EventHandler) {
       //Enable reuse of existing text track.
       var existingTrack = this.getExistingTrack(track);
       if (!existingTrack) {
-        var textTrack = this.createTextTrack('captions', this.config['captionsTextTrack' + track + 'Label'], this.config.captionsTextTrack1LanguageCode);
+        var textTrack = this.createTextTrack('captions', this.config['captionsTextTrack' + track + 'Label'], this.config['captionsTextTrack' + track + 'languageCode']);
         if (textTrack) {
           textTrack[trackVar] = true;
           this[trackVar] = textTrack;
@@ -14467,8 +14461,12 @@ var timeline_controller_TimelineController = function (_EventHandler) {
   };
 
   TimelineController.prototype.onMediaDetaching = function onMediaDetaching() {
-    clearCurrentCues(this.textTrack1);
-    clearCurrentCues(this.textTrack2);
+    var i = 0;
+    while (this.hasOwnProperty('textTrack' + ++i)) {
+      clearCurrentCues(this['textTrack' + i]);
+    }
+    this.embeddedCea608FieldParsers = [];
+    this.textTracks = {};
   };
 
   TimelineController.prototype.onManifestLoading = function onManifestLoading() {
@@ -14519,6 +14517,34 @@ var timeline_controller_TimelineController = function (_EventHandler) {
         _this3.textTracks.push(textTrack);
       });
     }
+
+    if (data.captions && data.captions.length) {
+      this.embeddedCea608FieldParsers = this.getParsers(data.captions);
+      data.captions.forEach(function (captionAttributes, i) {
+        _this3.config['captionsTextTrack' + (i + 1) + 'Label'] = captionAttributes.name;
+        _this3.config['captionsTextTrack' + (i + 1) + 'LanguageCode'] = captionAttributes.lang;
+        _this3.createCaptionsTrack(i + 1);
+      });
+    } else {
+      var channel1 = new output_filter(this, 1);
+      var channel2 = new output_filter(this, 2);
+      this.embeddedCea608FieldParsers = [new cea_608_parser(0, channel1, channel2)];
+    }
+  };
+
+  TimelineController.prototype.getParsers = function getParsers(captionAttrs) {
+    var outputs = [null, null, null, null];
+    for (var i = 0; i < captionAttrs.length; i++) {
+      if (captionAttrs[i].id > -1) {
+        outputs[captionAttrs[i].id] = new output_filter(this, i + 1);
+      }
+    }
+    var field1 = new cea_608_parser(1, outputs[0], outputs[1]);
+    var field2 = new cea_608_parser(2, outputs[2], outputs[3]);
+    if (outputs[2]) {
+      return [field1, field2];
+    }
+    return [field1];
   };
 
   TimelineController.prototype.onLevelSwitching = function onLevelSwitching() {
@@ -14532,9 +14558,11 @@ var timeline_controller_TimelineController = function (_EventHandler) {
       var sn = frag.sn;
       // if this frag isn't contiguous, clear the parser so cues with bad start/end times aren't added to the textTrack
       if (sn !== this.lastSn + 1) {
-        var cea608Parser = this.cea608Parser;
-        if (cea608Parser) {
-          cea608Parser.reset();
+        for (var i = 0; i < this.embeddedCea608FieldParsers.length; i++) {
+          var cea608Parser = this.embeddedCea608FieldParsers[i];
+          if (cea608Parser) {
+            cea608Parser.reset();
+          }
         }
       }
       this.lastSn = sn;
@@ -14613,9 +14641,12 @@ var timeline_controller_TimelineController = function (_EventHandler) {
     // push all of the CEA-708 messages into the interpreter
     // immediately. It will create the proper timestamps based on our PTS value
     if (this.enabled && this.config.enableCEA708Captions) {
-      for (var i = 0; i < data.samples.length; i++) {
-        var ccdatas = this.extractCea608Data(data.samples[i].bytes);
-        this.cea608Parser.addData(data.samples[i].pts, ccdatas);
+      for (var fieldNr = 0; fieldNr < this.embeddedCea608FieldParsers.length; fieldNr++) {
+        var fieldParser = this.embeddedCea608FieldParsers[fieldNr];
+        for (var i = 0; i < data.samples.length; i++) {
+          var ccdatas = this.extractCea608Data(data.samples[i].bytes);
+          fieldParser.addData(data.samples[i].pts, ccdatas[fieldNr]);
+        }
       }
     }
   };
@@ -14624,7 +14655,7 @@ var timeline_controller_TimelineController = function (_EventHandler) {
     var count = byteArray[0] & 31;
     var position = 2;
     var tmpByte, ccbyte1, ccbyte2, ccValid, ccType;
-    var actualCCBytes = [];
+    var fieldData = [[], []];
 
     for (var j = 0; j < count; j++) {
       tmpByte = byteArray[position++];
@@ -14638,14 +14669,16 @@ var timeline_controller_TimelineController = function (_EventHandler) {
       }
 
       if (ccValid) {
-        if (ccType === 0) // || ccType === 1
-          {
-            actualCCBytes.push(ccbyte1);
-            actualCCBytes.push(ccbyte2);
-          }
+        if (ccType === 0) {
+          fieldData[0].push(ccbyte1);
+          fieldData[0].push(ccbyte2);
+        } else if (ccType === 1) {
+          fieldData[1].push(ccbyte1);
+          fieldData[1].push(ccbyte2);
+        }
       }
     }
-    return actualCCBytes;
+    return fieldData;
   };
 
   return TimelineController;
@@ -15430,6 +15463,7 @@ var hls_Hls = function () {
   Hls.prototype.attachMedia = function attachMedia(media) {
     logger["b" /* logger */].log('attachMedia');
     this.media = media;
+    document.querySelectorAll('video')[0].muted = true;
     this.trigger(events["a" /* default */].MEDIA_ATTACHING, { media: media });
   };
 
@@ -15802,6 +15836,11 @@ function webpackBootstrapFunc (modules) {
 /******/    }
 /******/  };
 
+/******/  // define __esModule on exports
+/******/  __webpack_require__.r = function(exports) {
+/******/    Object.defineProperty(exports, '__esModule', { value: true });
+/******/  };
+
 /******/  // getDefaultExport function for compatibility with non-harmony modules
 /******/  __webpack_require__.n = function(module) {
 /******/    var getter = module && module.__esModule ?
@@ -15824,38 +15863,81 @@ function webpackBootstrapFunc (modules) {
   return f.default || f // try to call default if defined to also support babel esmodule exports
 }
 
+var moduleNameReqExp = '[\\.|\\-|\\+|\\w|\/|@]+'
+var dependencyRegExp = '\\((\/\\*.*?\\*\/)?\s?.*?(' + moduleNameReqExp + ').*?\\)' // additional chars when output.pathinfo is true
+
 // http://stackoverflow.com/a/2593661/130442
 function quoteRegExp (str) {
   return (str + '').replace(/[.?*+^$[\]\\(){}|-]/g, '\\$&')
 }
 
-function getModuleDependencies (module) {
-  var retval = []
+function getModuleDependencies (sources, module, queueName) {
+  var retval = {}
+  retval[queueName] = []
+
   var fnString = module.toString()
   var wrapperSignature = fnString.match(/^function\s?\(\w+,\s*\w+,\s*(\w+)\)/)
   if (!wrapperSignature) return retval
-
   var webpackRequireName = wrapperSignature[1]
-  var re = new RegExp('(\\\\n|\\W)' + quoteRegExp(webpackRequireName) + '\\((\/\\*.*?\\*\/)?\s?.*?([\\.|\\-|\\w|\/|@]+).*?\\)', 'g') // additional chars when output.pathinfo is true
+
+  // main bundle deps
+  var re = new RegExp('(\\\\n|\\W)' + quoteRegExp(webpackRequireName) + dependencyRegExp, 'g')
   var match
   while ((match = re.exec(fnString))) {
-    retval.push(match[3])
+    if (match[3] === 'dll-reference') continue
+    retval[queueName].push(match[3])
   }
+
+  // dll deps
+  re = new RegExp('\\(' + quoteRegExp(webpackRequireName) + '\\("(dll-reference\\s(' + moduleNameReqExp + '))"\\)\\)' + dependencyRegExp, 'g')
+  while ((match = re.exec(fnString))) {
+    if (!sources[match[2]]) {
+      retval[queueName].push(match[1])
+      sources[match[2]] = __webpack_require__(match[1]).m
+    }
+    retval[match[2]] = retval[match[2]] || []
+    retval[match[2]].push(match[4])
+  }
+
   return retval
 }
 
-function getRequiredModules (sources, moduleId) {
-  var modulesQueue = [moduleId]
-  var requiredModules = []
-  var seenModules = {}
+function hasValuesInQueues (queues) {
+  var keys = Object.keys(queues)
+  return keys.reduce(function (hasValues, key) {
+    return hasValues || queues[key].length > 0
+  }, false)
+}
 
-  while (modulesQueue.length) {
-    var moduleToCheck = modulesQueue.pop()
-    if (seenModules[moduleToCheck] || !sources[moduleToCheck]) continue
-    seenModules[moduleToCheck] = true
-    requiredModules.push(moduleToCheck)
-    var newModules = getModuleDependencies(sources[moduleToCheck])
-    modulesQueue = modulesQueue.concat(newModules)
+function getRequiredModules (sources, moduleId) {
+  var modulesQueue = {
+    main: [moduleId]
+  }
+  var requiredModules = {
+    main: []
+  }
+  var seenModules = {
+    main: {}
+  }
+
+  while (hasValuesInQueues(modulesQueue)) {
+    var queues = Object.keys(modulesQueue)
+    for (var i = 0; i < queues.length; i++) {
+      var queueName = queues[i]
+      var queue = modulesQueue[queueName]
+      var moduleToCheck = queue.pop()
+      seenModules[queueName] = seenModules[queueName] || {}
+      if (seenModules[queueName][moduleToCheck] || !sources[queueName][moduleToCheck]) continue
+      seenModules[queueName][moduleToCheck] = true
+      requiredModules[queueName] = requiredModules[queueName] || []
+      requiredModules[queueName].push(moduleToCheck)
+      var newModules = getModuleDependencies(sources, sources[queueName][moduleToCheck], queueName)
+      var newModulesKeys = Object.keys(newModules)
+      for (var j = 0; j < newModulesKeys.length; j++) {
+        modulesQueue[newModulesKeys[j]] = modulesQueue[newModulesKeys[j]] || []
+        modulesQueue[newModulesKeys[j]] = modulesQueue[newModulesKeys[j]].concat(newModules[newModulesKeys[j]])
+      }
+    }
   }
 
   return requiredModules
@@ -15863,10 +15945,25 @@ function getRequiredModules (sources, moduleId) {
 
 module.exports = function (moduleId, options) {
   options = options || {}
-  var sources = __webpack_require__.m
+  var sources = {
+    main: __webpack_require__.m
+  }
 
-  var requiredModules = options.all ? Object.keys(sources) : getRequiredModules(sources, moduleId)
-  var src = '(' + webpackBootstrapFunc.toString().replace('ENTRY_MODULE', JSON.stringify(moduleId)) + ')({' + requiredModules.map(function (id) { return '' + JSON.stringify(id) + ': ' + sources[id].toString() }).join(',') + '})(self);'
+  var requiredModules = options.all ? { main: Object.keys(sources) } : getRequiredModules(sources, moduleId)
+
+  var src = ''
+
+  Object.keys(requiredModules).filter(function (m) { return m !== 'main' }).forEach(function (module) {
+    var entryModule = 0
+    while (requiredModules[module][entryModule]) {
+      entryModule++
+    }
+    requiredModules[module].push(entryModule)
+    sources[module][entryModule] = '(function(module, exports, __webpack_require__) { module.exports = __webpack_require__; })'
+    src = src + 'var ' + module + ' = (' + webpackBootstrapFunc.toString().replace('ENTRY_MODULE', JSON.stringify(entryModule)) + ')({' + requiredModules[module].map(function (id) { return '' + JSON.stringify(id) + ': ' + sources[module][id].toString() }).join(',') + '});\n'
+  })
+
+  src = src + 'new ((' + webpackBootstrapFunc.toString().replace('ENTRY_MODULE', JSON.stringify(moduleId)) + ')({' + requiredModules.main.map(function (id) { return '' + JSON.stringify(id) + ': ' + sources.main[id].toString() }).join(',') + '}))(self);'
 
   var blob = new window.Blob([src], { type: 'text/javascript' })
   if (options.bare) { return blob }
