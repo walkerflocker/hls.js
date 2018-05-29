@@ -13712,7 +13712,7 @@ var Cea608Channel = function () {
                     if (this.outputFilter.newCue) {
                         this.outputFilter.newCue(this.cueStartTime, t, this.lastOutputScreen);
                         if (dispatch === true && this.outputFilter.dispatchCue) {
-                            this.outputFilter.dispatchCue();
+                            this.outputFilter.dispatchCue(this.cueStartTime);
                         }
                     }
                     this.cueStartTime = this.displayedMemory.isEmpty() ? null : t;
@@ -14107,11 +14107,13 @@ var OutputFilter = function () {
     this.screen = null;
   }
 
-  OutputFilter.prototype.dispatchCue = function dispatchCue() {
+  OutputFilter.prototype.dispatchCue = function dispatchCue(startTime) {
     if (this.startTime === null) {
       return;
     }
-    this.timelineController.addCues('textTrack' + this.track, this.startTime, this.endTime, this.screen);
+    // fall back to initial cue start time for seek, etc
+    var cueStartTime = startTime - this.startTime > 5 ? startTime : this.startTime;
+    this.timelineController.addCues('textTrack' + this.track, cueStartTime, this.endTime, this.screen);
     this.startTime = null;
   };
 
@@ -15463,7 +15465,6 @@ var hls_Hls = function () {
   Hls.prototype.attachMedia = function attachMedia(media) {
     logger["b" /* logger */].log('attachMedia');
     this.media = media;
-    document.querySelectorAll('video')[0].muted = true;
     this.trigger(events["a" /* default */].MEDIA_ATTACHING, { media: media });
   };
 

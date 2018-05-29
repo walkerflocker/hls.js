@@ -11246,7 +11246,6 @@ var hls_Hls = function () {
   Hls.prototype.attachMedia = function attachMedia(media) {
     logger["b" /* logger */].log('attachMedia');
     this.media = media;
-    document.querySelectorAll('video')[0].muted = true;
     this.trigger(events["a" /* default */].MEDIA_ATTACHING, { media: media });
   };
 
