@@ -34,6 +34,8 @@ const State = {
   WAITING_INIT_PTS: 'WAITING_INIT_PTS'
 };
 
+const TICK_INTERVAL = 100; // how often to tick in ms
+
 class AudioStreamController extends TaskLoop {
   constructor (hls, fragmentTracker) {
     super(hls,
@@ -95,7 +97,7 @@ class AudioStreamController extends TaskLoop {
     if (this.tracks) {
       let lastCurrentTime = this.lastCurrentTime;
       this.stopLoad();
-      this.setInterval(100);
+      this.setInterval(TICK_INTERVAL);
       this.fragLoadError = 0;
       if (lastCurrentTime > 0 && startPosition === -1) {
         logger.log(`audio:override startPosition with lastCurrentTime @${lastCurrentTime.toFixed(3)}`);
@@ -339,7 +341,7 @@ class AudioStreamController extends TaskLoop {
             if (audioSwitch || this.fragmentTracker.getState(frag) === FragmentState.NOT_LOADED) {
               this.fragCurrent = frag;
               this.startFragRequested = true;
-              if (!isNaN(frag.sn)) {
+              if (Number.isFinite(frag.sn)) {
                 this.nextLoadPosition = frag.start + frag.duration;
               }
 
@@ -476,7 +478,7 @@ class AudioStreamController extends TaskLoop {
       }
     } else {
       // switching to audio track, start timer if not already started
-      this.setInterval(100);
+      this.setInterval(TICK_INTERVAL);
     }
 
     // should we switch tracks ?
@@ -525,7 +527,7 @@ class AudioStreamController extends TaskLoop {
       if (this.startPosition === -1) {
         // first, check if start time offset has been set in playlist, if yes, use this value
         let startTimeOffset = newDetails.startTimeOffset;
-        if (!isNaN(startTimeOffset)) {
+        if (Number.isFinite(startTimeOffset)) {
           logger.log(`start time offset found in playlist, adjust startPosition to ${startTimeOffset}`);
           this.startPosition = startTimeOffset;
         } else {
@@ -654,7 +656,7 @@ class AudioStreamController extends TaskLoop {
         track = this.tracks[trackId],
         hls = this.hls;
 
-      if (isNaN(data.endPTS)) {
+      if (!Number.isFinite(data.endPTS)) {
         data.endPTS = data.startPTS + fragCurrent.duration;
         data.endDTS = data.startDTS + fragCurrent.duration;
       }

@@ -11,7 +11,8 @@ class CapLevelController extends EventHandler {
       Event.FPS_DROP_LEVEL_CAPPING,
       Event.MEDIA_ATTACHING,
       Event.MANIFEST_PARSED,
-      Event.BUFFER_CODECS);
+      Event.BUFFER_CODECS,
+      Event.MEDIA_DETACHING);
 
     this.autoLevelCapping = Number.POSITIVE_INFINITY;
     this.firstLevel = null;
@@ -44,7 +45,7 @@ class CapLevelController extends EventHandler {
     this.restrictedLevels = [];
     this.levels = data.levels;
     this.firstLevel = data.firstLevel;
-    if (hls.config.capLevelToPlayerSize && (data.video || (data.levels.length && data.altAudio))) {
+    if (hls.config.capLevelToPlayerSize && data.video) {
       // Start capping immediately if the manifest has signaled video codecs
       this._startCapping();
     }
@@ -62,6 +63,10 @@ class CapLevelController extends EventHandler {
 
   onLevelsUpdated (data) {
     this.levels = data.levels;
+  }
+
+  onMediaDetaching () {
+    this._stopCapping();
   }
 
   detectPlayerSize () {
